@@ -157,6 +157,7 @@ func (bot *Bot) Run() error {
 	bot.Netchan.Sequence1 = 1
 	bot.Netchan.Sequence2 = 0
 	bot.Netchan.ReliableS1 = true
+	bot.oldframes = make(map[int32]*pb.Frame)
 
 	defer c.Close()
 	log.Println("requesting challenge from", addr)
@@ -223,6 +224,21 @@ func (bot *Bot) Run() error {
 				return
 			}
 
+			// Remember each frame: the server delta-compresses the next one
+			// against the last frame we acked, so without a history of them
+			// ParsePacket has nothing to merge against and every value the
+			// server left out reads back as zero -- a standing player's origin
+			// most of all, since it is omitted precisely when it has not
+			// changed.
+			for _, fr := range packet.GetFrames() {
+				bot.oldframes[fr.GetNumber()] = fr
+				for n := range bot.oldframes {
+					if fr.GetNumber()-n > 64 {
+						delete(bot.oldframes, n)
+					}
+				}
+			}
+
 			for _, fr := range packet.GetFrames() {
 				bot.FrameNum = int(fr.GetNumber())
 				cb, ok := bot.callbacks[message.SVCFrame]
@@ -285,12 +301,6 @@ func (bot *Bot) Run() error {
 				cb, ok := bot.callbacks[message.SVCSpawnBaseline]
 				if ok {
 					cb(b, &bot.Netchan.out)
-				}
-			}
-			for _, frame := range packet.GetFrames() {
-				cb, ok := bot.callbacks[message.SVCFrame]
-				if ok {
-					cb(frame, &bot.Netchan.out)
 				}
 			}
 
