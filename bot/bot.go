@@ -297,6 +297,22 @@ func (bot *Bot) Run() error {
 					cb(cs, &bot.Netchan.out)
 				}
 			}
+
+			// Layouts and centerprints are parsed out of the packet but were
+			// never handed to a callback, so a caller could register for them
+			// and never hear anything.  They are how a mod talks to one
+			// client: the scoreboard `score` draws, the round and match
+			// announcements a team mod centers on screen.
+			for _, l := range packet.GetLayouts() {
+				if cb, ok := bot.callbacks[message.SVCLayout]; ok {
+					cb(l, &bot.Netchan.out)
+				}
+			}
+			for _, cp := range packet.GetCenterprints() {
+				if cb, ok := bot.callbacks[message.SVCCenterPrint]; ok {
+					cb(cp, &bot.Netchan.out)
+				}
+			}
 			for _, b := range packet.GetBaselines() {
 				cb, ok := bot.callbacks[message.SVCSpawnBaseline]
 				if ok {
