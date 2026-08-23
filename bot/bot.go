@@ -400,6 +400,14 @@ func (bot *Bot) Receive() (int, error) {
 	return bytes, nil
 }
 
+// SendUserinfo pushes the bot's current User map to the server as a userinfo
+// update, which is how a real client tells the server its name or skin changed.
+// Without it the map could be edited but never sent, so a mod's
+// ClientUserinfoChanged path was unreachable from a bot.
+func (b *Bot) SendUserinfo() {
+	b.Netchan.out.Append(ClientUserMessage(b.User.Marshal()))
+}
+
 // Marshal a c2s userinfo update message
 func ClientUserMessage(ui string) message.Buffer {
 	msg := message.NewEmptyBuffer()
