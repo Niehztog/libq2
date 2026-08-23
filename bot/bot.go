@@ -10,6 +10,7 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/packetflinger/libq2/message"
@@ -55,6 +56,14 @@ type Bot struct {
 	Aliases    map[string]string
 	CVars      map[string]string
 	Cmds       map[string]func(*Bot, Cmd)
+
+	// Move is the usercmd sent every frame.  Without it a bot can connect and
+	// talk but cannot walk: BuildUserCommand built an empty command and threw
+	// lastMove away, so every bot stood still.  Write it from a callback or
+	// another goroutine and the next frame carries it.
+	Move pl.UserCommand
+	// MoveMu guards Move for callers driving from another goroutine.
+	MoveMu sync.Mutex
 }
 
 type Connection struct {
@@ -401,12 +410,17 @@ func (b *Bot) BuildUserCommand() message.Buffer {
 	msg.WriteByte(message.CLCMove)
 	msg.WriteByte(0xa1) // checksum, make up something
 	msg.WriteLong(b.FrameNum)
-	move := pl.UserCommand{
-		LightLevel: 150,
+	b.MoveMu.Lock()
+	move := b.Move
+	b.MoveMu.Unlock()
+	move.LightLevel = 150
+	if move.Msec == 0 {
+		move.Msec = 100
 	}
+	// Three commands per packet is what the protocol expects: the oldest two
+	// are re-sends so a dropped packet does not lose input.
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
-	move.Msec = 100
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
 	return msg
 }
