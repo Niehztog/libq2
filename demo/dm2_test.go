@@ -3,6 +3,11 @@ package demo
 import (
 	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
+
+	pb "github.com/packetflinger/libq2/proto"
 )
 
 func TestUnmarshal(t *testing.T) {
@@ -178,4 +183,176 @@ func TestDemoDebug(t *testing.T) {
 				})
 			}
 	*/
+}
+
+func TestDeltaFrame(t *testing.T) {
+	tests := []struct {
+		name string
+		from *pb.Frame
+		to   *pb.Frame
+		want *pb.Frame
+	}{
+		{
+			name: "nil",
+			from: nil,
+			to:   nil,
+			want: nil,
+		},
+		{
+			name: "nil from",
+			from: nil,
+			to:   &pb.Frame{},
+			want: &pb.Frame{},
+		},
+		{
+			name: "nil to",
+			from: &pb.Frame{},
+			to:   nil,
+			want: nil,
+		},
+		{
+			name: "first",
+			from: nil,
+			to: &pb.Frame{
+				Number: 1,
+				Delta:  -1,
+			},
+			want: &pb.Frame{
+				Number: 1,
+				Delta:  -1,
+			},
+		},
+		{
+			name: "with playerstate",
+			from: &pb.Frame{
+				Number: 9,
+				Delta:  8,
+				PlayerState: &pb.PackedPlayer{
+					Fov:     120,
+					RdFlags: 5,
+					Stats: map[uint32]int32{
+						0: 100,
+						1: 50,
+						3: 25,
+					},
+				},
+			},
+			to: &pb.Frame{
+				Number: 10,
+				Delta:  9,
+				PlayerState: &pb.PackedPlayer{
+					Fov:     110,
+					RdFlags: 5,
+					Stats: map[uint32]int32{
+						0: 95,
+						1: 50,
+						3: 25,
+					},
+				},
+			},
+			want: &pb.Frame{
+				Number: 10,
+				Delta:  9,
+				PlayerState: &pb.PackedPlayer{
+					Movestate: &pb.PlayerMove{},
+					Fov:       110,
+					Stats: map[uint32]int32{
+						0: 95,
+					},
+				},
+			},
+		},
+		{
+			name: "with playerstate and entities",
+			from: &pb.Frame{
+				Number: 9,
+				Delta:  8,
+				PlayerState: &pb.PackedPlayer{
+					Fov:     120,
+					RdFlags: 5,
+					Stats: map[uint32]int32{
+						0: 100,
+						1: 50,
+						3: 25,
+					},
+				},
+				Entities: map[int32]*pb.PackedEntity{
+					3: {
+						Number:  3,
+						OriginX: 5,
+						OriginY: 6,
+					},
+					4: {
+						Number:  4,
+						OriginX: 5,
+						OriginY: 6,
+					},
+					5: {
+						Number: 5,
+						AngleX: 50,
+						AngleZ: -44,
+					},
+				},
+			},
+			to: &pb.Frame{
+				Number: 10,
+				Delta:  9,
+				PlayerState: &pb.PackedPlayer{
+					Fov:     110,
+					RdFlags: 5,
+					Stats: map[uint32]int32{
+						0: 95,
+						1: 50,
+						3: 25,
+					},
+				},
+				Entities: map[int32]*pb.PackedEntity{
+					3: {
+						Number:  3,
+						OriginX: 5,
+						OriginY: 6,
+					},
+					4: {
+						Number:  4,
+						OriginX: 6,
+						OriginY: 6,
+					},
+					5: {
+						Number: 5,
+						AngleX: 50,
+						AngleZ: -43,
+					},
+				},
+			},
+			want: &pb.Frame{
+				Number: 10,
+				Delta:  9,
+				PlayerState: &pb.PackedPlayer{
+					Movestate: &pb.PlayerMove{},
+					Fov:       110,
+					Stats: map[uint32]int32{
+						0: 95,
+					},
+				},
+				Entities: map[int32]*pb.PackedEntity{
+					4: {
+						Number:  4,
+						OriginX: 6,
+					},
+					5: {
+						Number: 5,
+						AngleZ: -43,
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := (&DM2Parser{}).DeltaFrame(tc.from, tc.to)
+			if diff := cmp.Diff(got, tc.want, protocmp.Transform()); diff != "" {
+				t.Errorf("DeltaFrame() = \n%v\nwant:\n%v", got, tc.want)
+			}
+		})
+	}
 }

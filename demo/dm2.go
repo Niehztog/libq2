@@ -21,12 +21,15 @@
 package demo
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"slices"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/packetflinger/libq2/message"
+	"google.golang.org/protobuf/testing/protocmp"
+
+	gocmp "cmp"
 
 	pb "github.com/packetflinger/libq2/proto"
 )
@@ -122,7 +125,7 @@ func (d *DM2Parser) ApplyPacket(packet *pb.Packet) error {
 		// sort them by number ascending
 		if len(frames) > 1 {
 			slices.SortFunc(frames, func(a, b *pb.Frame) int {
-				return cmp.Compare(int(a.GetNumber()), int(b.GetNumber()))
+				return gocmp.Compare(int(a.GetNumber()), int(b.GetNumber()))
 			})
 		}
 		for _, fr := range frames {
@@ -314,4 +317,44 @@ func (p *DM2Parser) RegisterCallback(event int, dofunc func(any)) {
 // Dynamically remove a particular callback
 func (p *DM2Parser) UnregisterCallback(msgtype int) {
 	delete(p.callbacks, msgtype)
+}
+
+// Generate a compressed frame proto. The returned proto will only contain the
+// data that is different between the to and from parameters. In reality, only
+// the playerstate and entities really get delta'd
+func (p *DM2Parser) DeltaFrame(from, to *pb.Frame) *pb.Frame {
+	if from == nil {
+		return to
+	}
+	if to == nil {
+		return nil
+	}
+	out := &pb.Frame{
+		Number:            to.Number,
+		Delta:             to.Delta,
+		Suppressed:        to.Suppressed,
+		AreaBytes:         to.AreaBytes,
+		AreaBits:          to.AreaBits,
+		PlayerState:       message.PlayerstateDiff(from.GetPlayerState(), to.GetPlayerState()),
+		Configstrings:     to.Configstrings,
+		Centerprints:      to.Centerprints,
+		Stufftexts:        to.Stufftexts,
+		Prints:            to.Prints,
+		Sounds:            to.Sounds,
+		TemporaryEntities: to.TemporaryEntities,
+		Flashes1:          to.Flashes1,
+		Flashes2:          to.Flashes2,
+		Layouts:           to.Layouts,
+	}
+	out.Entities = make(map[int32]*pb.PackedEntity)
+	for _, e := range to.GetEntities() {
+		num := int32(e.GetNumber())
+		ent := message.EntityDiff(from.GetEntities()[num], to.GetEntities()[num])
+		diff := cmp.Diff(ent, &pb.PackedEntity{Number: e.GetNumber()}, protocmp.Transform())
+		if diff != "" {
+			// only save entities with more than just a number set
+			out.Entities[int32(ent.Number)] = ent
+		}
+	}
+	return out
 }
