@@ -1,8 +1,9 @@
 package message
 
 import (
-	pb "github.com/packetflinger/libq2/proto"
 	"google.golang.org/protobuf/proto"
+
+	pb "github.com/packetflinger/libq2/proto"
 )
 
 const (
@@ -314,4 +315,97 @@ func WriteDeltaPlayerstate(from *pb.PackedPlayer, to *pb.PackedPlayer) Buffer {
 		}
 	}
 	return b
+}
+
+// Get a playerstate proto that represents the changes between two playerstates
+func PlayerstateDiff(from, to *pb.PackedPlayer) *pb.PackedPlayer {
+	if to == nil {
+		return nil
+	}
+	if from == nil {
+		return to
+	}
+	out := &pb.PackedPlayer{
+		Movestate: &pb.PlayerMove{},
+	}
+
+	mf := from.GetMovestate()
+	mt := to.GetMovestate()
+
+	if mf.GetType() != mt.GetType() {
+		out.Movestate.Type = to.Movestate.Type
+	}
+
+	if mf.GetOriginX() != mt.GetOriginX() || mf.GetOriginY() != mt.GetOriginY() || mf.GetOriginZ() != mt.GetOriginZ() {
+		out.Movestate.OriginX = mt.OriginX
+		out.Movestate.OriginY = mt.OriginY
+		out.Movestate.OriginZ = mt.OriginZ
+	}
+	if mf.GetVelocityX() != mt.GetVelocityX() || mf.GetVelocityY() != mt.GetVelocityY() || mf.GetVelocityZ() != mt.GetVelocityZ() {
+		out.Movestate.VelocityX = mt.VelocityX
+		out.Movestate.VelocityY = mt.VelocityY
+		out.Movestate.VelocityZ = mt.VelocityZ
+	}
+	if mf.GetTime() != mt.GetTime() {
+		out.Movestate.Time = mt.Time
+	}
+	if mf.GetFlags() != mt.GetFlags() {
+		out.Movestate.Flags = mt.Flags
+	}
+	if mf.GetGravity() != mt.GetGravity() {
+		out.Movestate.Gravity = mt.Gravity
+	}
+	if mf.GetDeltaAngleX() != mt.GetDeltaAngleX() || mf.GetDeltaAngleY() != mt.GetDeltaAngleY() || mf.GetDeltaAngleZ() != mt.GetDeltaAngleZ() {
+		out.Movestate.DeltaAngleX = mt.DeltaAngleX
+		out.Movestate.DeltaAngleY = mt.DeltaAngleY
+		out.Movestate.DeltaAngleZ = mt.DeltaAngleZ
+	}
+	if from.GetViewOffsetX() != to.GetViewOffsetX() || from.GetViewOffsetY() != to.GetViewOffsetY() || from.GetViewOffsetZ() != to.GetViewOffsetZ() {
+		out.ViewOffsetX = to.ViewOffsetX
+		out.ViewOffsetY = to.ViewOffsetY
+		out.ViewOffsetZ = to.ViewOffsetZ
+	}
+	if from.GetViewAnglesX() != to.GetViewAnglesX() || from.GetViewAnglesY() != to.GetViewAnglesY() || from.GetViewAnglesZ() != to.GetViewAnglesZ() {
+		out.ViewAnglesX = to.ViewAnglesX
+		out.ViewAnglesY = to.ViewAnglesY
+		out.ViewAnglesZ = to.ViewAnglesZ
+	}
+	if from.GetKickAnglesX() != to.GetKickAnglesX() || from.GetKickAnglesY() != to.GetKickAnglesY() || from.GetKickAnglesZ() != to.GetKickAnglesZ() {
+		out.KickAnglesX = to.KickAnglesX
+		out.KickAnglesY = to.KickAnglesY
+		out.KickAnglesZ = to.KickAnglesZ
+	}
+	if from.GetBlendW() != to.GetBlendW() || from.GetBlendX() != to.GetBlendX() || from.GetBlendY() != to.GetBlendY() || from.GetBlendZ() != to.GetBlendZ() {
+		out.BlendW = to.BlendW
+		out.BlendX = to.BlendX
+		out.BlendY = to.BlendY
+		out.BlendZ = to.BlendZ
+	}
+	if from.GetFov() != to.GetFov() {
+		out.Fov = to.Fov
+	}
+	if from.GetRdFlags() != to.GetRdFlags() {
+		out.RdFlags = to.RdFlags
+	}
+	if from.GetGunFrame() != to.GetGunFrame() || from.GetGunOffsetX() != to.GetGunOffsetX() || from.GetGunOffsetY() != to.GetGunOffsetY() || from.GetGunOffsetZ() != to.GetGunOffsetZ() || from.GetGunAnglesX() != to.GetGunAnglesX() || from.GetGunAnglesY() != to.GetGunAnglesY() || from.GetGunAnglesZ() != to.GetGunAnglesZ() {
+		out.GunFrame = to.GunFrame
+		out.GunAnglesX = to.GunAnglesX
+		out.GunAnglesY = to.GunAnglesY
+		out.GunAnglesZ = to.GunAnglesZ
+		out.GunOffsetX = to.GunOffsetX
+		out.GunOffsetY = to.GunOffsetY
+		out.GunOffsetZ = to.GunOffsetZ
+	}
+	if from.GetGunIndex() != to.GetGunIndex() {
+		out.GunIndex = to.GunIndex
+	}
+	toStats := to.GetStats()
+	fromStats := from.GetStats()
+	out.Stats = make(map[uint32]int32)
+	for i := range uint32(MaxStats) {
+		if toStats[i] != fromStats[i] {
+			out.Stats[i] = to.Stats[i]
+		}
+	}
+	return out
 }

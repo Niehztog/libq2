@@ -223,3 +223,176 @@ func TestWriteDeltaPlayerstate(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayerstateDiff(t *testing.T) {
+	tests := []struct {
+		name string
+		to   *pb.PackedPlayer
+		from *pb.PackedPlayer
+		want *pb.PackedPlayer
+	}{
+		{
+			name: "nil",
+			from: nil,
+			to:   nil,
+			want: nil,
+		},
+		{
+			name: "nil from",
+			from: nil,
+			to:   &pb.PackedPlayer{},
+			want: &pb.PackedPlayer{},
+		},
+		{
+			name: "nil to",
+			to:   nil,
+			from: &pb.PackedPlayer{},
+			want: nil,
+		},
+		{
+			name: "test1",
+			to: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+				},
+			},
+			from: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 0,
+					OriginY: 6,
+					OriginZ: 7,
+				},
+			},
+			want: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+				},
+			},
+		},
+		{
+			name: "test2 no stats",
+			to: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+				RdFlags: 45,
+				Fov:     90,
+			},
+			from: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 0,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   2,
+				},
+				RdFlags: 45,
+				Fov:     90,
+			},
+			want: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+			},
+		},
+		{
+			name: "test3 with same stats",
+			to: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+				RdFlags: 45,
+				Fov:     90,
+				Stats: map[uint32]int32{
+					2: 45,
+					4: 100,
+				},
+			},
+			from: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 0,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   2,
+				},
+				RdFlags: 45,
+				Fov:     90,
+				Stats: map[uint32]int32{
+					2: 45,
+					4: 100,
+				},
+			},
+			want: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+			},
+		},
+		{
+			name: "test3 with different stats",
+			to: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+				RdFlags: 45,
+				Fov:     90,
+				Stats: map[uint32]int32{
+					2: 45,
+					4: 95,
+				},
+			},
+			from: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 0,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   2,
+				},
+				RdFlags: 45,
+				Fov:     90,
+				Stats: map[uint32]int32{
+					2: 45,
+					4: 100,
+				},
+			},
+			want: &pb.PackedPlayer{
+				Movestate: &pb.PlayerMove{
+					OriginX: 5,
+					OriginY: 6,
+					OriginZ: 7,
+					Flags:   10,
+				},
+				Stats: map[uint32]int32{
+					4: 95,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PlayerstateDiff(tc.from, tc.to)
+			if diff := cmp.Diff(got, tc.want, protocmp.Transform()); diff != "" {
+				t.Errorf("PlayerstateDiff() = \n%v\nwant:\n%v", got, tc.want)
+			}
+		})
+	}
+}
