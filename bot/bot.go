@@ -10,6 +10,7 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/packetflinger/libq2/message"
@@ -55,6 +56,14 @@ type Bot struct {
 	Aliases    map[string]string
 	CVars      map[string]string
 	Cmds       map[string]func(*Bot, Cmd)
+
+	// Move is the usercmd sent every frame.  Without it a bot can connect and
+	// talk but cannot walk: BuildUserCommand built an empty command and threw
+	// lastMove away, so every bot stood still.  Write it from a callback or
+	// another goroutine and the next frame carries it.
+	Move pl.UserCommand
+	// MoveMu guards Move for callers driving from another goroutine.
+	MoveMu sync.Mutex
 }
 
 type Connection struct {
@@ -148,6 +157,7 @@ func (bot *Bot) Run() error {
 	bot.Netchan.Sequence1 = 1
 	bot.Netchan.Sequence2 = 0
 	bot.Netchan.ReliableS1 = true
+	bot.oldframes = make(map[int32]*pb.Frame)
 
 	defer c.Close()
 	log.Println("requesting challenge from", addr)
@@ -214,6 +224,21 @@ func (bot *Bot) Run() error {
 				return
 			}
 
+			// Remember each frame: the server delta-compresses the next one
+			// against the last frame we acked, so without a history of them
+			// ParsePacket has nothing to merge against and every value the
+			// server left out reads back as zero -- a standing player's origin
+			// most of all, since it is omitted precisely when it has not
+			// changed.
+			for _, fr := range packet.GetFrames() {
+				bot.oldframes[fr.GetNumber()] = fr
+				for n := range bot.oldframes {
+					if fr.GetNumber()-n > 64 {
+						delete(bot.oldframes, n)
+					}
+				}
+			}
+
 			for _, fr := range packet.GetFrames() {
 				bot.FrameNum = int(fr.GetNumber())
 				cb, ok := bot.callbacks[message.SVCFrame]
@@ -272,16 +297,26 @@ func (bot *Bot) Run() error {
 					cb(cs, &bot.Netchan.out)
 				}
 			}
+
+			// Layouts and centerprints are parsed out of the packet but were
+			// never handed to a callback, so a caller could register for them
+			// and never hear anything.  They are how a mod talks to one
+			// client: the scoreboard `score` draws, the round and match
+			// announcements a team mod centers on screen.
+			for _, l := range packet.GetLayouts() {
+				if cb, ok := bot.callbacks[message.SVCLayout]; ok {
+					cb(l, &bot.Netchan.out)
+				}
+			}
+			for _, cp := range packet.GetCenterprints() {
+				if cb, ok := bot.callbacks[message.SVCCenterPrint]; ok {
+					cb(cp, &bot.Netchan.out)
+				}
+			}
 			for _, b := range packet.GetBaselines() {
 				cb, ok := bot.callbacks[message.SVCSpawnBaseline]
 				if ok {
 					cb(b, &bot.Netchan.out)
-				}
-			}
-			for _, frame := range packet.GetFrames() {
-				cb, ok := bot.callbacks[message.SVCFrame]
-				if ok {
-					cb(frame, &bot.Netchan.out)
 				}
 			}
 
@@ -381,6 +416,14 @@ func (bot *Bot) Receive() (int, error) {
 	return bytes, nil
 }
 
+// SendUserinfo pushes the bot's current User map to the server as a userinfo
+// update, which is how a real client tells the server its name or skin changed.
+// Without it the map could be edited but never sent, so a mod's
+// ClientUserinfoChanged path was unreachable from a bot.
+func (b *Bot) SendUserinfo() {
+	b.Netchan.out.Append(ClientUserMessage(b.User.Marshal()))
+}
+
 // Marshal a c2s userinfo update message
 func ClientUserMessage(ui string) message.Buffer {
 	msg := message.NewEmptyBuffer()
@@ -401,12 +444,17 @@ func (b *Bot) BuildUserCommand() message.Buffer {
 	msg.WriteByte(message.CLCMove)
 	msg.WriteByte(0xa1) // checksum, make up something
 	msg.WriteLong(b.FrameNum)
-	move := pl.UserCommand{
-		LightLevel: 150,
+	b.MoveMu.Lock()
+	move := b.Move
+	b.MoveMu.Unlock()
+	move.LightLevel = 150
+	if move.Msec == 0 {
+		move.Msec = 100
 	}
+	// Three commands per packet is what the protocol expects: the oldest two
+	// are re-sends so a dropped packet does not lose input.
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
-	move.Msec = 100
 	msg.Append(move.WriteDeltaUsercmd(pl.UserCommand{}))
 	return msg
 }
