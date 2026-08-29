@@ -212,6 +212,8 @@ func (m *Buffer) ParsePacketEntities(from map[int32]*pb.PackedEntity) map[int32]
 	}
 	out := make(map[int32]*pb.PackedEntity)
 	for k := range from {
+		// Make a copy of the entities from last frame because they're pointers
+		// and we don't want to mess with the "from" data.
 		out[k] = proto.Clone(from[k]).(*pb.PackedEntity)
 	}
 	for {
@@ -220,11 +222,14 @@ func (m *Buffer) ParsePacketEntities(from map[int32]*pb.PackedEntity) map[int32]
 		if num <= 0 {
 			break
 		}
-		orig, ok := out[int32(num)]
+		previous, ok := out[int32(num)]
 		if !ok {
-			orig = &pb.PackedEntity{}
+			previous = &pb.PackedEntity{}
 		}
-		out[int32(num)] = m.ParseEntity(orig, num, bits)
+		e := m.ParseEntity(previous, num, bits)
+		if !e.GetRemove() {
+			out[int32(num)] = e
+		}
 	}
 	return out
 }
@@ -470,4 +475,94 @@ func DeltaEntityBitmask(to *pb.PackedEntity, from *pb.PackedEntity) int {
 	}
 
 	return bits
+}
+
+// Emit an entity proto containing only the data that is different between the
+// to and from parameters.
+func EntityDiff(from, to *pb.PackedEntity) *pb.PackedEntity {
+	if from == nil {
+		return to
+	}
+	out := &pb.PackedEntity{}
+	out.Number = to.Number
+
+	if to.GetOriginX() != from.GetOriginX() {
+		out.OriginX = to.OriginX
+	}
+
+	if to.GetOriginY() != from.GetOriginY() {
+		out.OriginY = to.OriginY
+	}
+
+	if to.GetOriginZ() != from.GetOriginZ() {
+		out.OriginZ = to.OriginZ
+	}
+
+	if to.GetAngleX() != from.GetAngleX() {
+		out.AngleX = to.AngleX
+	}
+
+	if to.GetAngleY() != from.GetAngleY() {
+		out.AngleY = to.AngleY
+	}
+
+	if to.GetAngleZ() != from.GetAngleZ() {
+		out.AngleZ = to.AngleZ
+	}
+
+	if to.GetSkin() != from.GetSkin() {
+		out.Skin = to.Skin
+	}
+
+	if to.GetFrame() != from.GetFrame() {
+		out.Frame = to.Frame
+	}
+
+	if to.Effects != from.Effects {
+		out.Effects = to.Effects
+	}
+
+	if to.GetRenderFx() != from.GetRenderFx() {
+		out.RenderFx = to.RenderFx
+	}
+
+	if to.GetSolid() != from.GetSolid() {
+		out.Solid = to.Solid
+	}
+
+	if to.GetEvent() != from.GetEvent() {
+		out.Event = to.Event
+	}
+
+	if to.GetModelIndex() != from.GetModelIndex() {
+		out.ModelIndex = to.ModelIndex
+	}
+
+	if to.GetModelIndex2() != from.GetModelIndex2() {
+		out.ModelIndex2 = to.ModelIndex2
+	}
+
+	if to.GetModelIndex3() != from.GetModelIndex3() {
+		out.ModelIndex3 = to.ModelIndex3
+	}
+
+	if to.GetModelIndex4() != from.GetModelIndex4() {
+		out.ModelIndex4 = to.ModelIndex4
+	}
+
+	if to.GetSound() != from.GetSound() {
+		out.Sound = to.Sound
+	}
+
+	if to.GetOldOriginX() != from.GetOldOriginX() {
+		out.OldOriginX = to.OldOriginX
+	}
+	if to.GetOldOriginY() != from.GetOldOriginY() {
+		out.OldOriginY = to.OldOriginY
+	}
+	if to.GetOldOriginZ() != from.GetOldOriginZ() {
+		out.OldOriginZ = to.OldOriginZ
+	}
+
+	return out
 }

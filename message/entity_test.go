@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	pb "github.com/packetflinger/libq2/proto"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	pb "github.com/packetflinger/libq2/proto"
 )
 
 func TestParseEntityBitmask(t *testing.T) {
@@ -342,6 +343,61 @@ func TestDeltaEntityBitmask(t *testing.T) {
 			got := DeltaEntityBitmask(tc.to, tc.from)
 			if got != tc.want {
 				t.Errorf("DeltaEntityBitmask(%v, %v) = %v, want %v\n", prototext.Format(tc.from), prototext.Format(tc.to), got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEntityDiff(t *testing.T) {
+	tests := []struct {
+		name string
+		to   *pb.PackedEntity
+		from *pb.PackedEntity
+		want *pb.PackedEntity
+	}{
+		{
+			name: "nil entities",
+			to:   nil,
+			from: nil,
+			want: nil,
+		},
+		{
+			name: "test 1",
+			to: &pb.PackedEntity{
+				Number:  1,
+				OriginX: 5,
+				OriginY: 6,
+			},
+			from: nil,
+			want: &pb.PackedEntity{
+				Number:  1,
+				OriginX: 5,
+				OriginY: 6,
+			},
+		},
+		{
+			name: "test 2",
+			to: &pb.PackedEntity{
+				Number:  1,
+				OriginX: 5,
+				OriginY: 6,
+			},
+			from: &pb.PackedEntity{
+				Number:  1,
+				OriginX: 6,
+				OriginY: 6,
+			},
+			want: &pb.PackedEntity{
+				Number:  1,
+				OriginX: 5,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EntityDiff(tc.from, tc.to)
+			if diff := cmp.Diff(got, tc.want, protocmp.Transform()); diff != "" {
+				t.Errorf("EntityDiff() = \n%v\nwant:\n%v", got, tc.want)
 			}
 		})
 	}
