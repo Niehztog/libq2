@@ -320,6 +320,18 @@ func (bot *Bot) Run() error {
 				}
 			}
 
+			// Sounds were parsed into the packet and dropped on the floor, the
+			// same way layouts and centerprints were.  A sound is the only
+			// evidence some mod behaviour leaves: a death scream, a pickup, an
+			// announcer cue.  Handed to a callback keyed on SVCSound, which
+			// receives *pb.PackedSound and can map Index through the
+			// CS_SOUNDS block to a name.
+			for _, snd := range packet.GetSounds() {
+				if cb, ok := bot.callbacks[message.SVCSound]; ok {
+					cb(snd, &bot.Netchan.out)
+				}
+			}
+
 			bot.Netchan.out.Append(bot.BuildUserCommand())
 			bot.Send()
 		}
