@@ -138,7 +138,18 @@ func (m *Buffer) ParsePrint() *pb.Print {
 func (m *Buffer) ParseSound() *pb.PackedSound {
 	s := &pb.PackedSound{}
 	s.Flags = uint32(m.ReadByte())
-	s.Index = uint32(m.ReadByte())
+	// SoundIndex16 was defined and never honoured, and the cost is not a wrong
+	// index -- it is one byte of desync for the REST of the packet, so
+	// everything parsed after a single such sound is garbage.  Q2PRO sets the
+	// flag whenever the sound index exceeds 255 (sv/game.c:565) and writes a
+	// short for it (sv/send.c:550), which on a map with many precached sounds
+	// is most of the player-model sounds -- the death and pain screams among
+	// them.
+	if (s.Flags & SoundIndex16) > 0 {
+		s.Index = uint32(m.ReadShort())
+	} else {
+		s.Index = uint32(m.ReadByte())
+	}
 	if (s.Flags & SoundVolume) > 0 {
 		s.Volume = uint32(m.ReadByte())
 	} else {
